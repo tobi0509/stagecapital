@@ -1,0 +1,123 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
+import { formatValuation } from '@/lib/valuation/calculator'
+import type { InvestmentCase, StartupProfile, UserRole } from '@/types/database'
+
+export default async function EventPage({
+  params,
+}: {
+  params: Promise<{ eventSlug: string }>
+}) {
+  const { eventSlug } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('*')
+    .eq('slug', eventSlug)
+    .single()
+
+  if (!event) redirect('/dashboard')
+
+  const { data: roleData } = await supabase
+    .from('event_roles')
+    .select('role')
+    .eq('event_id', event.id)
+    .eq('user_id', user.id)
+    .single()
+
+  const myRole = roleData?.role as UserRole | null
+
+  const { data: cases } = await supabase
+    .from('investment_cases')
+    .select('*, startup_profiles(*)')
+    .eq('event_id', event.id)
+    .order('pitch_order', { ascending: true })
+
+  const { data: bids } = await supabase
+    .from('bids')
+    .select('investment_case_id, equity_pct, amount')
+    .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
+    .eq('status', 'active')
+
+  // Compute live valuations per case
+  const caseValuations: Record<string, { capitalRaised: number; equitySold: number; impliedVal: number | null }> = {}
+  for (const bid of (bids ?? [])) {
+    const v = caseValuations[bid.investment_case_id] ?? { capitalRaised: 0, equitySold: 0, impliedVal: null }
+    v.capitalRaised += bid.amount
+    v.equitySold += bid.equity_pct
+    caseValuations[bid.investment_case_id] = v
+  }
+  for (const id of Object.keys(caseValuations)) {
+    const v = caseValuations[id]
+    v.impliedVal = v.equitySold > 0 ? v.capitalRaised / (v.equitySold / 100) : null
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar eventSlug={eventSlug} role={myRole} />
+      <main className="flex-1 p-6 md:p-8 space-y-8">
+        <div>
+          <p className="text-blue-400 text-sm font-medium uppercase tracking-wider">{event.status.replace('_', ' ')}</p>
+          <h1 className="text-3xl font-black text-white mt-1">{event.name}</h1>
+          <p className="text-white/50 text-sm mt-1">
+            {new Date(event.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {(cases ?? []).map((ic: InvestmentCase & { startup_profiles: StartupProfile | null }) => {
+            const sp = ic.startup_profiles
+            const lv = caseValuations[ic.id]
+            const href = `/events/${eventSlug}/invest/${ic.id}`
+
+            return (
+              <Link
+                key={ic.id}
+                href={href}
+                className="group rounded-xl border border-white/10 bg-white/5 hover:border-blue-500/30 hover:bg-white/8 transition-all p-5 space-y-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-white group-hover:text-blue-300 transition-colors">
+                      {sp?.company_name || ic.title || 'Unnamed Startup'}
+                    </p>
+                    {sp?.one_liner && (
+                      <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{sp.one_liner}</p>
+                    )}
+                  </div>
+                  <PhaseIndicator status={ic.bidding_status} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-white/40 text-xs">Valuation</p>
+                    <p className="font-semibold text-white">
+                      {lv?.impliedVal ? formatValuation(lv.impliedVal) : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-white/40 text-xs">Equity Offered</p>
+                    <p className="font-semibold text-white">{ic.equity_offered_pct}%</p>
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+
+        {(cases ?? []).length === 0 && (
+          <div className="text-center py-20 text-white/40">
+            <p className="text-4xl mb-3">🚀</p>
+            <p>No investment cases yet. Check back soon.</p>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
