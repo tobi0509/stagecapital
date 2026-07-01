@@ -38,15 +38,19 @@ export default async function LeaderboardPage({
     .select('*, startup_profiles(*)')
     .eq('event_id', event.id)
 
-  const { data: bids } = await supabase
-    .from('bids')
-    .select('investment_case_id, equity_pct, amount, investor_user_id')
-    .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
-    .in('status', ['active', 'finalized'])
+  // Case-level totals come from a SECURITY DEFINER RPC, not from
+  // summing raw bid rows — per-row bid visibility is intentionally
+  // restricted for some roles (see migration 0005), but the
+  // leaderboard's totals must stay accurate for every viewer.
+  const { data: statsRows } = await supabase.rpc('event_valuation_stats', { p_event_id: event.id })
+  const statsMap: Record<string, { total_equity_sold_pct: number; total_capital_raised: number; implied_valuation: number | null; investor_count: number }> = {}
+  for (const row of (statsRows ?? [])) {
+    statsMap[row.investment_case_id] = row
+  }
 
-  // Compute live data
   const liveMap: Record<string, InvestmentCaseLive> = {}
   for (const ic of (cases ?? [])) {
+    const s = statsMap[ic.id]
     liveMap[ic.id] = {
       investment_case_id: ic.id,
       event_id: event.id,
@@ -55,24 +59,10 @@ export default async function LeaderboardPage({
       bidding_status: ic.bidding_status,
       countdown_ends_at: ic.countdown_ends_at,
       pitch_order: ic.pitch_order,
-      total_equity_sold_pct: 0,
-      total_capital_raised: 0,
-      implied_valuation: null,
-      active_bid_count: 0,
-    }
-  }
-
-  for (const bid of (bids ?? [])) {
-    const lv = liveMap[bid.investment_case_id]
-    if (!lv) continue
-    lv.total_capital_raised += bid.amount
-    lv.total_equity_sold_pct += bid.equity_pct
-    lv.active_bid_count++
-  }
-
-  for (const lv of Object.values(liveMap)) {
-    if (lv.total_equity_sold_pct > 0) {
-      lv.implied_valuation = lv.total_capital_raised / (lv.total_equity_sold_pct / 100)
+      total_equity_sold_pct: s?.total_equity_sold_pct ?? 0,
+      total_capital_raised: s?.total_capital_raised ?? 0,
+      implied_valuation: s?.implied_valuation ?? null,
+      active_bid_count: s?.investor_count ?? 0,
     }
   }
 

@@ -24,7 +24,7 @@ export default function PitchDisplayPage({
 
   useEffect(() => {
     supabase
-      .from('startup_profiles')
+      .from('startup_profiles_public')
       .select('*')
       .eq('investment_case_id', caseId)
       .single()
