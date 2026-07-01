@@ -19,7 +19,7 @@ export default function PitchDisplayPage({
   const supabase = createClient()
   const [startup, setStartup] = useState<StartupProfile | null>(null)
 
-  const { bids, phase, countdownEndsAt, equityOffered, totalEquitySold, totalCapital, impliedValuation } =
+  const { bids, phase, countdownEndsAt, equityOffered, totalEquitySold, totalCapital, impliedValuation, investorCount } =
     useInvestmentCaseLive(caseId)
 
   useEffect(() => {
@@ -31,7 +31,10 @@ export default function PitchDisplayPage({
       .then(({ data }) => setStartup(data))
   }, [caseId])
 
-  const activeBids = bids.filter(b => b.status === 'active')
+  // `bids` from the hook is already the phase-appropriate set
+  // (active while open, finalized once closed) — no need to
+  // re-filter by status here.
+  const topBids = bids
 
   return (
     <div className="min-h-screen bg-black flex flex-col p-8 md:p-16 gap-8">
@@ -75,7 +78,7 @@ export default function PitchDisplayPage({
           {[
             { label: 'Capital Raised', value: formatAmount(totalCapital) },
             { label: 'Equity Sold', value: `${totalEquitySold.toFixed(1)}%` },
-            { label: 'Investors', value: activeBids.length.toString() },
+            { label: 'Investors', value: investorCount.toString() },
           ].map(({ label, value }) => (
             <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
               <p className="text-2xl md:text-3xl font-black text-white">{value}</p>
@@ -90,10 +93,10 @@ export default function PitchDisplayPage({
         </div>
 
         {/* Top bids */}
-        {activeBids.length > 0 && (
+        {topBids.length > 0 && (
           <div className="max-w-2xl mx-auto w-full space-y-2">
             <p className="text-xs text-white/30 uppercase tracking-wider text-center">Top Bids</p>
-            {[...activeBids]
+            {[...topBids]
               .sort((a, b) => b.price_per_pct - a.price_per_pct)
               .slice(0, 5)
               .map((bid, i) => (

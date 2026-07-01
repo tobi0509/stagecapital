@@ -97,6 +97,7 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
   const totalEquitySold = stats?.total_equity_sold_pct ?? 0
   const totalCapital = stats?.total_capital_raised ?? 0
   const impliedValuation = stats?.implied_valuation ?? null
+  const investorCount = stats?.investor_count ?? 0
 
   return {
     bids: displayBids,
@@ -107,6 +108,7 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
     totalEquitySold,
     totalCapital,
     impliedValuation,
+    investorCount,
     loading,
     refresh: fetchInitial,
   }
