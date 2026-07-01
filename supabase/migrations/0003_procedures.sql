@@ -166,7 +166,7 @@ BEGIN
       IF p_equity_pct > v_remaining_equity THEN
         -- Displace cheapest bids to make room
         FOR v_bid IN
-          SELECT id, equity_pct, amount, price_per_pct
+          SELECT id, equity_pct, amount, price_per_pct, investor_user_id
           FROM public.bids
           WHERE investment_case_id = p_investment_case_id
             AND status = 'active'
@@ -179,7 +179,7 @@ BEGIN
           WHERE id = v_bid.id;
 
           INSERT INTO public.bid_history (bid_id, investment_case_id, investor_user_id, event_type, equity_pct, amount, price_per_pct, phase, displaced_by_bid_id)
-          VALUES (v_bid.id, p_investment_case_id, v_bid.investor_user_id_from_bids, 'displaced', v_bid.equity_pct, v_bid.amount, v_bid.price_per_pct, 'competitive', v_new_bid_id);
+          VALUES (v_bid.id, p_investment_case_id, v_bid.investor_user_id, 'displaced', v_bid.equity_pct, v_bid.amount, v_bid.price_per_pct, 'competitive', v_new_bid_id);
 
           v_displaced_ids := array_append(v_displaced_ids, v_bid.id);
           v_freed_equity := v_freed_equity + v_bid.equity_pct;
