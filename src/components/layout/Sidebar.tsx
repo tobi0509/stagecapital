@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { BarChart3, Home, Settings, Users, Zap, Trophy, Mic, Building2, LogOut, Menu, X } from 'lucide-react'
+import { BarChart3, Home, Settings, Users, Zap, Trophy, Mic, Building2, LogOut, Menu, X, ScrollText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/types/database'
 
@@ -114,6 +114,7 @@ function getLinks(eventSlug?: string, role?: UserRole | null) {
       { href: `${base}/manage`, icon: Settings, label: 'Manage Event' },
       { href: `${base}/manage/participants`, icon: Users, label: 'Participants' },
       { href: `${base}/manage/startups`, icon: Building2, label: 'Startups' },
+      { href: `${base}/manage/history`, icon: ScrollText, label: 'Bid History' },
       { href: `${base}/host`, icon: Mic, label: 'Host Panel' },
       { href: `${base}/leaderboard`, icon: Trophy, label: 'Leaderboard' },
     ]
@@ -122,6 +123,7 @@ function getLinks(eventSlug?: string, role?: UserRole | null) {
   if (role === 'host') {
     return [
       { href: `${base}/host`, icon: Mic, label: 'Host Panel' },
+      { href: `${base}/manage/history`, icon: ScrollText, label: 'Bid History' },
       { href: `${base}/leaderboard`, icon: Trophy, label: 'Leaderboard' },
     ]
   }
