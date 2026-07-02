@@ -63,7 +63,7 @@ export default function PortfolioPage({
   }, [eventSlug])
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-4 md:p-6 space-y-6 max-w-2xl mx-auto w-full">
         <div>

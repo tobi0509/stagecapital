@@ -105,7 +105,7 @@ export default function InvestPage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex flex-col md:flex-row min-h-screen">
         <Sidebar eventSlug={eventSlug} role={myRole} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-white/40">Loading…</div>
@@ -115,7 +115,7 @@ export default function InvestPage({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-4 md:p-6 space-y-5 max-w-2xl mx-auto w-full">
 

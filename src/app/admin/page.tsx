@@ -33,7 +33,7 @@ export default async function AdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar role="super_admin" />
       <main className="flex-1 p-6 md:p-8 space-y-8">
         <div className="flex items-start justify-between gap-4">

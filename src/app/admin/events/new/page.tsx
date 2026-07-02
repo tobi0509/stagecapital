@@ -72,7 +72,7 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar role="super_admin" />
       <main className="flex-1 p-6 md:p-8 max-w-2xl space-y-6">
         <div>

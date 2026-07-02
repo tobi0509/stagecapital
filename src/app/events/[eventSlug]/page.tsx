@@ -59,7 +59,7 @@ export default async function EventPage({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-8">
         <div>

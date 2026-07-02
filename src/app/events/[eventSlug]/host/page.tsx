@@ -122,7 +122,7 @@ export default function HostPage({
 
   if (!['host', 'event_admin', 'super_admin'].includes(myRole ?? '')) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex flex-col md:flex-row min-h-screen">
         <Sidebar eventSlug={eventSlug} role={myRole} />
         <main className="flex-1 flex items-center justify-center text-white/40">
           Host access required
@@ -132,7 +132,7 @@ export default function HostPage({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-6">
         <div>
