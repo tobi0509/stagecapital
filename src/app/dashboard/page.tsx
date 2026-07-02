@@ -33,7 +33,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar role={superAdmin ? 'super_admin' : null} />
       <main className="flex-1 p-6 md:p-8 space-y-8">
         <div>
           <h1 className="text-3xl font-black text-white">Dashboard</h1>

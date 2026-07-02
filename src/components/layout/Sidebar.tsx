@@ -48,10 +48,10 @@ export function Sidebar({ eventSlug, role }: SidebarProps) {
 
 function getLinks(eventSlug?: string, role?: UserRole | null) {
   if (!eventSlug) {
-    return [
-      { href: '/dashboard', icon: Home, label: 'Dashboard' },
-      { href: '/admin', icon: Settings, label: 'Admin' },
-    ]
+    const base = [{ href: '/dashboard', icon: Home, label: 'Dashboard' }]
+    return role === 'super_admin'
+      ? [...base, { href: '/admin', icon: Settings, label: 'Admin' }]
+      : base
   }
 
   const base = `/events/${eventSlug}`

@@ -2,16 +2,33 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { calculateImpliedValuation } from '@/lib/valuation/calculator'
 import type { Bid, BiddingStatus } from '@/types/database'
+
+interface ValuationStats {
+  total_equity_sold_pct: number
+  total_capital_raised: number
+  implied_valuation: number | null
+  investor_count: number
+}
 
 export function useInvestmentCaseLive(caseId: string | undefined) {
   const [bids, setBids] = useState<Bid[]>([])
   const [phase, setPhase] = useState<BiddingStatus>('pending')
   const [countdownEndsAt, setCountdownEndsAt] = useState<Date | null>(null)
   const [equityOffered, setEquityOffered] = useState(0)
+  const [stats, setStats] = useState<ValuationStats | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+
+  // Case-level totals come from a SECURITY DEFINER RPC, not from
+  // summing the locally visible `bids` rows — per-row visibility
+  // is intentionally restricted for some roles (see migration
+  // 0005), but the aggregate totals must stay accurate for everyone.
+  const fetchStats = useCallback(async () => {
+    if (!caseId) return
+    const { data } = await supabase.rpc('case_valuation_stats', { p_case_id: caseId }).single()
+    if (data) setStats(data as ValuationStats)
+  }, [caseId])
 
   const fetchInitial = useCallback(async () => {
     if (!caseId) return
@@ -25,8 +42,9 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
       if (ic.countdown_ends_at) setCountdownEndsAt(new Date(ic.countdown_ends_at))
     }
     setBids(bidsData ?? [])
+    await fetchStats()
     setLoading(false)
-  }, [caseId])
+  }, [caseId, fetchStats])
 
   useEffect(() => {
     fetchInitial()
@@ -53,6 +71,7 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
           }
           return next
         })
+        fetchStats()
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -69,20 +88,16 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [caseId, fetchInitial])
+  }, [caseId, fetchInitial, fetchStats])
 
   const activeBids = useMemo(() => bids.filter(b => b.status === 'active'), [bids])
   const finalizedBids = useMemo(() => bids.filter(b => b.status === 'finalized'), [bids])
   const displayBids = phase === 'closed' ? finalizedBids : activeBids
 
-  const totalEquitySold = useMemo(() =>
-    displayBids.reduce((sum, b) => sum + b.equity_pct, 0), [displayBids])
-
-  const totalCapital = useMemo(() =>
-    displayBids.reduce((sum, b) => sum + b.amount, 0), [displayBids])
-
-  const impliedValuation = useMemo(() =>
-    calculateImpliedValuation(displayBids), [displayBids])
+  const totalEquitySold = stats?.total_equity_sold_pct ?? 0
+  const totalCapital = stats?.total_capital_raised ?? 0
+  const impliedValuation = stats?.implied_valuation ?? null
+  const investorCount = stats?.investor_count ?? 0
 
   return {
     bids: displayBids,
@@ -93,6 +108,7 @@ export function useInvestmentCaseLive(caseId: string | undefined) {
     totalEquitySold,
     totalCapital,
     impliedValuation,
+    investorCount,
     loading,
     refresh: fetchInitial,
   }
