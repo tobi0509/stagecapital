@@ -42,7 +42,13 @@ export default function ManageStartupsPage({
 
       const { data: role } = await supabase
         .from('event_roles').select('role').eq('event_id', ev.id).eq('user_id', user.id).single()
-      setMyRole(role?.role as UserRole)
+      const r = role?.role as UserRole
+      setMyRole(r)
+
+      // Gate the fetch itself, not just the render — startup_profiles
+      // includes contact_email, which non-admin roles must never
+      // receive over the network regardless of what gets rendered.
+      if (!['event_admin', 'super_admin'].includes(r ?? '')) return
 
       await load(ev.id)
     }
@@ -89,6 +95,17 @@ export default function ManageStartupsPage({
       toast.success('Investment case created')
     }
     setLoading(false)
+  }
+
+  if (myRole && !['event_admin', 'super_admin'].includes(myRole)) {
+    return (
+      <div className="flex flex-col md:flex-row min-h-screen">
+        <Sidebar eventSlug={eventSlug} role={myRole} />
+        <main className="flex-1 flex items-center justify-center text-white/40">
+          Event Admin access required
+        </main>
+      </div>
+    )
   }
 
   return (

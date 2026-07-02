@@ -46,14 +46,14 @@ export default function PortfolioPage({
 
       const { data: cases } = await supabase
         .from('investment_cases')
-        .select('*, startup_profiles(*)')
+        .select('*, startup_profiles(id,company_name,logo_url)')
         .eq('event_id', ev.id)
         .order('pitch_order')
       setAllCases(cases ?? [])
 
       const { data: bids } = await supabase
         .from('bids')
-        .select('*, investment_cases(*, startup_profiles(*))')
+        .select('*, investment_cases(*, startup_profiles(id,company_name,logo_url))')
         .eq('investor_user_id', user.id)
         .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
         .eq('status', 'active')

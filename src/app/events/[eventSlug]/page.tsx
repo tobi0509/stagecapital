@@ -35,27 +35,17 @@ export default async function EventPage({
 
   const { data: cases } = await supabase
     .from('investment_cases')
-    .select('*, startup_profiles(*)')
+    .select('*, startup_profiles(id,company_name,logo_url,one_liner)')
     .eq('event_id', event.id)
     .order('pitch_order', { ascending: true })
 
-  const { data: bids } = await supabase
-    .from('bids')
-    .select('investment_case_id, equity_pct, amount')
-    .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
-    .eq('status', 'active')
-
-  // Compute live valuations per case
-  const caseValuations: Record<string, { capitalRaised: number; equitySold: number; impliedVal: number | null }> = {}
-  for (const bid of (bids ?? [])) {
-    const v = caseValuations[bid.investment_case_id] ?? { capitalRaised: 0, equitySold: 0, impliedVal: null }
-    v.capitalRaised += bid.amount
-    v.equitySold += bid.equity_pct
-    caseValuations[bid.investment_case_id] = v
-  }
-  for (const id of Object.keys(caseValuations)) {
-    const v = caseValuations[id]
-    v.impliedVal = v.equitySold > 0 ? v.capitalRaised / (v.equitySold / 100) : null
+  // Case-level totals come from a SECURITY DEFINER RPC, not from
+  // summing raw bid rows — this also correctly reflects finalized
+  // bids on closed cases, which a plain status='active' filter misses.
+  const { data: statsRows } = await supabase.rpc('event_valuation_stats', { p_event_id: event.id })
+  const caseValuations: Record<string, { impliedVal: number | null }> = {}
+  for (const row of (statsRows ?? [])) {
+    caseValuations[row.investment_case_id] = { impliedVal: row.implied_valuation }
   }
 
   return (

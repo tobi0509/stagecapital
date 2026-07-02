@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
@@ -22,6 +22,7 @@ export default function HostPage({
   const [cases, setCases] = useState<(InvestmentCase & { startup_profiles: StartupProfile | null })[]>([])
   const [myRole, setMyRole] = useState<UserRole | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const authorizedRef = useRef(false)
 
   useEffect(() => {
     async function init() {
@@ -38,7 +39,17 @@ export default function HostPage({
         .eq('event_id', ev.id)
         .eq('user_id', user.id)
         .single()
-      setMyRole(role?.role as UserRole)
+      const r = role?.role as UserRole
+      setMyRole(r)
+
+      // Gate the fetch itself, not just the render — startup_profiles
+      // includes contact_email, which non-privileged roles must never
+      // receive over the network regardless of what gets rendered.
+      // authorizedRef also guards the realtime subscription below,
+      // which would otherwise re-fetch on every investment_cases
+      // change regardless of the viewer's role.
+      authorizedRef.current = ['host', 'event_admin', 'super_admin'].includes(r ?? '')
+      if (!authorizedRef.current) return
 
       await loadCases(ev.id)
     }
@@ -58,7 +69,7 @@ export default function HostPage({
     const channel = supabase
       .channel(`host:${eventSlug}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'investment_cases' }, () => {
-        if (event?.id) loadCases(event.id)
+        if (event?.id && authorizedRef.current) loadCases(event.id)
       })
       .subscribe()
 

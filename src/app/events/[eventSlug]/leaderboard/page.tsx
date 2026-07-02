@@ -35,7 +35,7 @@ export default async function LeaderboardPage({
 
   const { data: cases } = await supabase
     .from('investment_cases')
-    .select('*, startup_profiles(*)')
+    .select('*, startup_profiles(id,investment_case_id,company_name,logo_url,one_liner)')
     .eq('event_id', event.id)
 
   // Case-level totals come from a SECURITY DEFINER RPC, not from
