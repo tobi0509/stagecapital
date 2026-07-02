@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
+import { JoinEventButton } from '@/components/events/JoinEventButton'
 import { formatValuation } from '@/lib/valuation/calculator'
 import type { InvestmentCase, StartupProfile, UserRole } from '@/types/database'
 
@@ -60,6 +61,24 @@ export default async function EventPage({
           </p>
         </div>
 
+        {!myRole && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-6 text-center space-y-3">
+            {['registration_open', 'active'].includes(event.status) ? (
+              <>
+                <p className="text-white font-semibold">You're not signed up for this event yet</p>
+                <p className="text-white/50 text-sm max-w-md mx-auto">
+                  Join as an Attendee to get a virtual budget and start bidding once pitches open.
+                </p>
+                <JoinEventButton eventId={event.id} />
+              </>
+            ) : (
+              <p className="text-white/50 text-sm">
+                Registration for this event isn't open yet — check back soon.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(cases ?? []).map((ic: InvestmentCase & { startup_profiles: StartupProfile | null }) => {
             const sp = ic.startup_profiles
@@ -101,7 +120,7 @@ export default async function EventPage({
           })}
         </div>
 
-        {(cases ?? []).length === 0 && (
+        {myRole && (cases ?? []).length === 0 && (
           <div className="text-center py-20 text-white/40">
             <p className="text-4xl mb-3">🚀</p>
             <p>No investment cases yet. Check back soon.</p>
