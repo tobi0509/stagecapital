@@ -35,7 +35,7 @@ export default async function LeaderboardPage({
 
   const { data: cases } = await supabase
     .from('investment_cases')
-    .select('*, startup_profiles(*)')
+    .select('*, startup_profiles(id,investment_case_id,company_name,logo_url,one_liner)')
     .eq('event_id', event.id)
 
   // Case-level totals come from a SECURITY DEFINER RPC, not from
@@ -74,7 +74,7 @@ export default async function LeaderboardPage({
   const eventClosed = event.status === 'closed' || event.status === 'results_published'
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-6 max-w-3xl">
         <div>

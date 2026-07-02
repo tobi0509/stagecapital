@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
+import { JoinEventButton } from '@/components/events/JoinEventButton'
 import { formatValuation } from '@/lib/valuation/calculator'
 import type { InvestmentCase, StartupProfile, UserRole } from '@/types/database'
 
@@ -35,31 +36,21 @@ export default async function EventPage({
 
   const { data: cases } = await supabase
     .from('investment_cases')
-    .select('*, startup_profiles(*)')
+    .select('*, startup_profiles(id,company_name,logo_url,one_liner)')
     .eq('event_id', event.id)
     .order('pitch_order', { ascending: true })
 
-  const { data: bids } = await supabase
-    .from('bids')
-    .select('investment_case_id, equity_pct, amount')
-    .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
-    .eq('status', 'active')
-
-  // Compute live valuations per case
-  const caseValuations: Record<string, { capitalRaised: number; equitySold: number; impliedVal: number | null }> = {}
-  for (const bid of (bids ?? [])) {
-    const v = caseValuations[bid.investment_case_id] ?? { capitalRaised: 0, equitySold: 0, impliedVal: null }
-    v.capitalRaised += bid.amount
-    v.equitySold += bid.equity_pct
-    caseValuations[bid.investment_case_id] = v
-  }
-  for (const id of Object.keys(caseValuations)) {
-    const v = caseValuations[id]
-    v.impliedVal = v.equitySold > 0 ? v.capitalRaised / (v.equitySold / 100) : null
+  // Case-level totals come from a SECURITY DEFINER RPC, not from
+  // summing raw bid rows — this also correctly reflects finalized
+  // bids on closed cases, which a plain status='active' filter misses.
+  const { data: statsRows } = await supabase.rpc('event_valuation_stats', { p_event_id: event.id })
+  const caseValuations: Record<string, { impliedVal: number | null }> = {}
+  for (const row of (statsRows ?? [])) {
+    caseValuations[row.investment_case_id] = { impliedVal: row.implied_valuation }
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-8">
         <div>
@@ -69,6 +60,24 @@ export default async function EventPage({
             {new Date(event.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
           </p>
         </div>
+
+        {!myRole && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-6 text-center space-y-3">
+            {['registration_open', 'active'].includes(event.status) ? (
+              <>
+                <p className="text-white font-semibold">You're not signed up for this event yet</p>
+                <p className="text-white/50 text-sm max-w-md mx-auto">
+                  Join as an Attendee to get a virtual budget and start bidding once pitches open.
+                </p>
+                <JoinEventButton eventId={event.id} />
+              </>
+            ) : (
+              <p className="text-white/50 text-sm">
+                Registration for this event isn't open yet — check back soon.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(cases ?? []).map((ic: InvestmentCase & { startup_profiles: StartupProfile | null }) => {
@@ -111,7 +120,7 @@ export default async function EventPage({
           })}
         </div>
 
-        {(cases ?? []).length === 0 && (
+        {myRole && (cases ?? []).length === 0 && (
           <div className="text-center py-20 text-white/40">
             <p className="text-4xl mb-3">🚀</p>
             <p>No investment cases yet. Check back soon.</p>

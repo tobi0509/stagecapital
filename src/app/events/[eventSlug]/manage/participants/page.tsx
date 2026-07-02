@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { RegistrationLinkCard } from '@/components/events/RegistrationLinkCard'
 import { toast } from 'sonner'
 import type { Event, UserRole } from '@/types/database'
 
@@ -45,7 +46,13 @@ export default function ManageParticipantsPage({
 
       const { data: role } = await supabase
         .from('event_roles').select('role').eq('event_id', ev.id).eq('user_id', user.id).single()
-      setMyRole(role?.role as UserRole)
+      const r = role?.role as UserRole
+      setMyRole(r)
+
+      // Gate the fetch itself, not just the render — this list
+      // includes every participant's real email address, which
+      // non-admin roles must never receive over the network.
+      if (!['event_admin', 'super_admin'].includes(r ?? '')) return
 
       await loadParticipants(ev.id)
     }
@@ -106,8 +113,19 @@ export default function ManageParticipantsPage({
     attendee: 'text-white/60 bg-white/5',
   }
 
+  if (myRole && !['event_admin', 'super_admin'].includes(myRole)) {
+    return (
+      <div className="flex flex-col md:flex-row min-h-screen">
+        <Sidebar eventSlug={eventSlug} role={myRole} />
+        <main className="flex-1 flex items-center justify-center text-white/40">
+          Event Admin access required
+        </main>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-6">
         <div>
@@ -153,14 +171,7 @@ export default function ManageParticipantsPage({
           </Button>
         </div>
 
-        {/* Registration link */}
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Self-Registration Link</p>
-          <p className="text-blue-400 font-mono text-sm break-all">
-            {typeof window !== 'undefined' ? `${window.location.origin}/events/${eventSlug}` : ''}
-          </p>
-          <p className="text-xs text-white/30 mt-1">Share this link — users who register via it get Attendee role by default.</p>
-        </div>
+        <RegistrationLinkCard eventSlug={eventSlug} />
 
         {/* Participants list */}
         <div className="rounded-xl border border-white/10 overflow-hidden">

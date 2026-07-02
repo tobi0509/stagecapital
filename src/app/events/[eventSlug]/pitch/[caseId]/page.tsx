@@ -58,6 +58,10 @@ export default function PitchDisplayPage({
       <div className="flex-1 flex flex-col justify-center gap-10">
         {/* Company header */}
         <div className="text-center space-y-2">
+          {startup?.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={startup.logo_url} alt={`${startup.company_name} logo`} className="w-20 h-20 rounded-2xl object-cover mx-auto mb-2 border border-white/10" />
+          )}
           {startup?.company_name && (
             <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight">
               {startup.company_name}

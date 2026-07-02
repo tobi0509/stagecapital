@@ -37,7 +37,7 @@ export default async function StartupDashboardPage({
 
   if (!ic) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex flex-col md:flex-row min-h-screen">
         <Sidebar eventSlug={eventSlug} role={myRole} />
         <main className="flex-1 flex items-center justify-center text-white/40 text-center p-8">
           <div>
@@ -69,7 +69,7 @@ export default async function StartupDashboardPage({
     .in('role', ['investor', 'attendee'])
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-6 md:p-8 space-y-6 max-w-3xl">
         <div className="flex items-start justify-between gap-4 flex-wrap">

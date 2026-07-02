@@ -34,7 +34,10 @@ export default function InvestPage({
     useInvestmentCaseLive(caseId)
 
   const budget = useBudget(event?.id, userId, myBudgetTotal)
-  const myBid = bids.find(b => b.investor_user_id === userId && (b.status === 'active'))
+  // `bids` from the hook is already the phase-appropriate set
+  // (active while open, finalized once closed) — no extra status
+  // filter needed here.
+  const myBid = bids.find(b => b.investor_user_id === userId)
 
   useEffect(() => {
     async function init() {
@@ -105,7 +108,7 @@ export default function InvestPage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex flex-col md:flex-row min-h-screen">
         <Sidebar eventSlug={eventSlug} role={myRole} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-white/40">Loading…</div>
@@ -115,13 +118,17 @@ export default function InvestPage({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar eventSlug={eventSlug} role={myRole} />
       <main className="flex-1 p-4 md:p-6 space-y-5 max-w-2xl mx-auto w-full">
 
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
+            {startup?.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={startup.logo_url} alt={`${startup.company_name} logo`} className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+            )}
             <h1 className="text-2xl font-black text-white">
               {startup?.company_name || 'Startup'}
             </h1>
@@ -176,15 +183,14 @@ export default function InvestPage({
           </div>
         )}
 
-        {/* Active bids list */}
+        {/* Bids list */}
         {bids.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">
-              Active Bids ({bids.filter(b => b.status === 'active').length})
+              {phase === 'closed' ? 'Final Bids' : 'Active Bids'} ({bids.length})
             </h3>
             <div className="space-y-1">
               {[...bids]
-                .filter(b => b.status === 'active')
                 .sort((a, b) => b.price_per_pct - a.price_per_pct)
                 .map((bid, i) => (
                   <div
@@ -225,6 +231,17 @@ export default function InvestPage({
                 <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Solution</p>
                 <p className="text-white/70 text-sm">{startup.solution}</p>
               </div>
+            )}
+
+            {startup.pitch_deck_url && (
+              <a
+                href={startup.pitch_deck_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 underline"
+              >
+                📄 View pitch deck
+              </a>
             )}
 
             {myRole === 'investor' && startup.contact_email && (
