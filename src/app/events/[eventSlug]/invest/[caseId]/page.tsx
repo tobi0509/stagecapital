@@ -34,7 +34,10 @@ export default function InvestPage({
     useInvestmentCaseLive(caseId)
 
   const budget = useBudget(event?.id, userId, myBudgetTotal)
-  const myBid = bids.find(b => b.investor_user_id === userId && (b.status === 'active'))
+  // `bids` from the hook is already the phase-appropriate set
+  // (active while open, finalized once closed) — no extra status
+  // filter needed here.
+  const myBid = bids.find(b => b.investor_user_id === userId)
 
   useEffect(() => {
     async function init() {
@@ -180,15 +183,14 @@ export default function InvestPage({
           </div>
         )}
 
-        {/* Active bids list */}
+        {/* Bids list */}
         {bids.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">
-              Active Bids ({bids.filter(b => b.status === 'active').length})
+              {phase === 'closed' ? 'Final Bids' : 'Active Bids'} ({bids.length})
             </h3>
             <div className="space-y-1">
               {[...bids]
-                .filter(b => b.status === 'active')
                 .sort((a, b) => b.price_per_pct - a.price_per_pct)
                 .map((bid, i) => (
                   <div
