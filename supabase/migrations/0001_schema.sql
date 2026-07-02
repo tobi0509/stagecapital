@@ -143,14 +143,18 @@ CREATE TABLE IF NOT EXISTS public.bids (
   status             text NOT NULL DEFAULT 'active'
                      CHECK (status IN ('active','displaced','withdrawn','finalized')),
   placed_at          timestamptz NOT NULL DEFAULT now(),
-  updated_at         timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (investment_case_id, investor_user_id)
+  updated_at         timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_bids_investment_case ON public.bids(investment_case_id);
 CREATE INDEX IF NOT EXISTS idx_bids_investor        ON public.bids(investor_user_id);
 CREATE INDEX IF NOT EXISTS idx_bids_competitive
   ON public.bids(investment_case_id, price_per_pct ASC)
+  WHERE status = 'active';
+-- Only one ACTIVE bid per investor per case — a user can be displaced/withdrawn
+-- and re-bid without hitting a stale uniqueness violation from history rows.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bids_one_active_per_investor
+  ON public.bids(investment_case_id, investor_user_id)
   WHERE status = 'active';
 
 -- Bid History (append-only audit log)
