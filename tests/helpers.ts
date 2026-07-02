@@ -62,26 +62,31 @@ export async function deleteTestUser(userId: string) {
 export interface TestEventFixture {
   eventId: string
   caseId: string
+  caseId2: string
   host: TestUser
   investorA: TestUser
   investorB: TestUser
   attendee: TestUser
   startup: TestUser
+  startup2: TestUser
 }
 
 /**
- * Spins up a disposable event with one investment case (20% equity,
- * $500k ask) and four role-holders (host, two investors, one
- * attendee), all pointed at the real Supabase project. Call
- * teardownEventFixture() when done to remove everything created.
+ * Spins up a disposable event with TWO investment cases (20% equity,
+ * $500k ask each) and five role-holders (host, two investors, one
+ * attendee, two startups), all pointed at the real Supabase project.
+ * Two cases exist specifically so concurrency tests can exercise
+ * cross-case races (budget, deadlocks) that a single-case fixture
+ * can't reach. Call teardownEventFixture() when done.
  */
 export async function setupEventFixture(): Promise<TestEventFixture> {
-  const [host, investorA, investorB, attendee, startup] = await Promise.all([
+  const [host, investorA, investorB, attendee, startup, startup2] = await Promise.all([
     createTestUser('host'),
     createTestUser('inv-a'),
     createTestUser('inv-b'),
     createTestUser('attendee'),
     createTestUser('startup'),
+    createTestUser('startup2'),
   ])
 
   const { data: event, error: eventErr } = await admin
@@ -105,25 +110,25 @@ export async function setupEventFixture(): Promise<TestEventFixture> {
     { event_id: event.id, user_id: investorB.id, role: 'investor' },
     { event_id: event.id, user_id: attendee.id, role: 'attendee' },
     { event_id: event.id, user_id: startup.id, role: 'startup' },
+    { event_id: event.id, user_id: startup2.id, role: 'startup' },
   ])
   if (rolesErr) throw new Error(`Failed to assign roles: ${rolesErr.message}`)
 
-  const { data: ic, error: caseErr } = await admin
+  const { data: cases, error: caseErr } = await admin
     .from('investment_cases')
-    .insert({
-      event_id: event.id,
-      startup_user_id: startup.id,
-      title: 'Vitest Test Startup',
-      equity_offered_pct: 20,
-      ask_amount: 500000,
-      pitch_order: 1,
-      bidding_status: 'pending',
-    })
+    .insert([
+      { event_id: event.id, startup_user_id: startup.id, title: 'Vitest Test Startup', equity_offered_pct: 20, ask_amount: 500000, pitch_order: 1, bidding_status: 'pending' },
+      { event_id: event.id, startup_user_id: startup2.id, title: 'Vitest Test Startup 2', equity_offered_pct: 20, ask_amount: 500000, pitch_order: 2, bidding_status: 'pending' },
+    ])
     .select()
-    .single()
-  if (caseErr || !ic) throw new Error(`Failed to create investment case: ${caseErr?.message}`)
+  if (caseErr || !cases || cases.length !== 2) throw new Error(`Failed to create investment cases: ${caseErr?.message}`)
 
-  return { eventId: event.id, caseId: ic.id, host, investorA, investorB, attendee, startup }
+  return {
+    eventId: event.id,
+    caseId: cases[0].id,
+    caseId2: cases[1].id,
+    host, investorA, investorB, attendee, startup, startup2,
+  }
 }
 
 export async function teardownEventFixture(fixture: TestEventFixture) {
@@ -136,7 +141,7 @@ export async function teardownEventFixture(fixture: TestEventFixture) {
     console.error(`Failed to delete test event ${fixture.eventId}:`, error.message)
   }
   await Promise.all(
-    [fixture.host, fixture.investorA, fixture.investorB, fixture.attendee, fixture.startup]
+    [fixture.host, fixture.investorA, fixture.investorB, fixture.attendee, fixture.startup, fixture.startup2]
       .map(u => deleteTestUser(u.id))
   )
 }
