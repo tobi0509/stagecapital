@@ -24,6 +24,8 @@ export default function StartupProfilePage({
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Partial<StartupProfile>>({})
   const [profileId, setProfileId] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingDeck, setUploadingDeck] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -83,6 +85,66 @@ export default function StartupProfilePage({
       else { setProfileId(data.id); toast.success('Profile created!') }
     }
     setLoading(false)
+  }
+
+  async function ensureProfile(): Promise<string | null> {
+    if (profileId) return profileId
+    if (!ic) return null
+    const { data, error } = await supabase
+      .from('startup_profiles')
+      .insert({ ...form, investment_case_id: ic.id })
+      .select()
+      .single()
+    if (error) { toast.error('Failed to create profile', { description: error.message }); return null }
+    setProfileId(data.id)
+    return data.id
+  }
+
+  async function uploadAsset(file: File, kind: 'logo' | 'pitch-deck') {
+    if (!ic) return
+    if (kind === 'logo' && !file.type.startsWith('image/')) {
+      toast.error('Logo must be an image file'); return
+    }
+    if (kind === 'logo' && file.size > 5 * 1024 * 1024) {
+      toast.error('Logo must be under 5MB'); return
+    }
+    if (kind === 'pitch-deck' && file.type !== 'application/pdf') {
+      toast.error('Pitch deck must be a PDF'); return
+    }
+    if (kind === 'pitch-deck' && file.size > 25 * 1024 * 1024) {
+      toast.error('Pitch deck must be under 25MB'); return
+    }
+
+    const setUploading = kind === 'logo' ? setUploadingLogo : setUploadingDeck
+    setUploading(true)
+
+    const id = await ensureProfile()
+    if (!id) { setUploading(false); return }
+
+    const ext = file.name.split('.').pop()
+    const path = `${ic.id}/${kind}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('startup-assets')
+      .upload(path, file, { upsert: true, cacheControl: '3600' })
+
+    if (upErr) {
+      toast.error('Upload failed', { description: upErr.message })
+      setUploading(false)
+      return
+    }
+
+    const { data: pub } = supabase.storage.from('startup-assets').getPublicUrl(path)
+    const column = kind === 'logo' ? 'logo_url' : 'pitch_deck_url'
+    const url = `${pub.publicUrl}?v=${Date.now()}`
+
+    const { error: dbErr } = await supabase.from('startup_profiles').update({ [column]: url }).eq('id', id)
+    if (dbErr) {
+      toast.error('Upload saved, but failed to link it', { description: dbErr.message })
+    } else {
+      setForm(p => ({ ...p, [column]: url }))
+      toast.success(kind === 'logo' ? 'Logo uploaded!' : 'Pitch deck uploaded!')
+    }
+    setUploading(false)
   }
 
   const f = (key: keyof StartupProfile) => ({
@@ -147,6 +209,46 @@ export default function StartupProfilePage({
           <div className="space-y-1.5">
             <Label className="text-white/70">Traction</Label>
             <Textarea {...f('traction')} placeholder="Key metrics, revenue, users, partnerships…" rows={2} className="bg-white/10 border-white/20 text-white resize-none" />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-white/70">Logo</Label>
+              <div className="flex items-center gap-3">
+                {form.logo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.logo_url} alt="Logo preview" className="w-10 h-10 rounded-lg object-cover border border-white/20" />
+                )}
+                <label className={`flex-1 text-sm text-center px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-white/80 cursor-pointer hover:bg-white/15 transition-colors ${locked || uploadingLogo ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {uploadingLogo ? 'Uploading…' : form.logo_url ? 'Replace logo' : 'Upload logo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={locked || uploadingLogo}
+                    onChange={e => { const file = e.target.files?.[0]; if (file) uploadAsset(file, 'logo'); e.target.value = '' }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-white/70">Pitch Deck (PDF)</Label>
+              <div className="flex items-center gap-3">
+                {form.pitch_deck_url && (
+                  <a href={form.pitch_deck_url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 underline shrink-0">View current</a>
+                )}
+                <label className={`flex-1 text-sm text-center px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-white/80 cursor-pointer hover:bg-white/15 transition-colors ${locked || uploadingDeck ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {uploadingDeck ? 'Uploading…' : form.pitch_deck_url ? 'Replace deck' : 'Upload deck'}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    disabled={locked || uploadingDeck}
+                    onChange={e => { const file = e.target.files?.[0]; if (file) uploadAsset(file, 'pitch-deck'); e.target.value = '' }}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
 
           {!locked && (

@@ -122,6 +122,10 @@ export default function InvestPage({
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
+            {startup?.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={startup.logo_url} alt={`${startup.company_name} logo`} className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+            )}
             <h1 className="text-2xl font-black text-white">
               {startup?.company_name || 'Startup'}
             </h1>
@@ -225,6 +229,17 @@ export default function InvestPage({
                 <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Solution</p>
                 <p className="text-white/70 text-sm">{startup.solution}</p>
               </div>
+            )}
+
+            {startup.pitch_deck_url && (
+              <a
+                href={startup.pitch_deck_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 underline"
+              >
+                📄 View pitch deck
+              </a>
             )}
 
             {myRole === 'investor' && startup.contact_email && (
