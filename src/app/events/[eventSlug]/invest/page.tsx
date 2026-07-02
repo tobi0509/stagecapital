@@ -56,7 +56,7 @@ export default function PortfolioPage({
         .select('*, investment_cases(*, startup_profiles(id,company_name,logo_url))')
         .eq('investor_user_id', user.id)
         .in('investment_case_id', (cases ?? []).map((c: InvestmentCase) => c.id))
-        .eq('status', 'active')
+        .in('status', ['active', 'finalized'])
       setMyBids(bids ?? [])
     }
     init()
@@ -68,7 +68,7 @@ export default function PortfolioPage({
       <main className="flex-1 p-4 md:p-6 space-y-6 max-w-2xl mx-auto w-full">
         <div>
           <p className="text-blue-400 text-sm font-medium uppercase tracking-wider">My Portfolio</p>
-          <h1 className="text-2xl font-black text-white mt-1">Active Bids</h1>
+          <h1 className="text-2xl font-black text-white mt-1">My Bids</h1>
         </div>
 
         <BudgetMeter
