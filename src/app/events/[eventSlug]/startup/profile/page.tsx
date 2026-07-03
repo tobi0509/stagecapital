@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { formatAmount } from '@/lib/valuation/calculator'
 import type { StartupProfile, InvestmentCase, UserRole } from '@/types/database'
 
 export default function StartupProfilePage({
@@ -24,6 +25,9 @@ export default function StartupProfilePage({
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Partial<StartupProfile>>({})
   const [profileId, setProfileId] = useState<string | null>(null)
+  const [valuation, setValuation] = useState('')
+  const [equityPct, setEquityPct] = useState('')
+  const [savingAsk, setSavingAsk] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -47,6 +51,8 @@ export default function StartupProfilePage({
       if (!investCase) return
       setIc(investCase)
       setLocked(!!investCase.data_locked_at)
+      setEquityPct(String(investCase.equity_offered_pct))
+      setValuation(String(Math.round(investCase.ask_amount / (investCase.equity_offered_pct / 100))))
 
       const { data: sp } = await supabase
         .from('startup_profiles')
@@ -85,6 +91,32 @@ export default function StartupProfilePage({
     setLoading(false)
   }
 
+  async function saveAsk() {
+    if (!ic) return
+    const v = parseFloat(valuation)
+    const pct = parseFloat(equityPct)
+    if (!(v > 0) || !(pct > 0)) {
+      toast.error('Enter a valid valuation and equity percentage')
+      return
+    }
+
+    setSavingAsk(true)
+    const { data, error } = await supabase.rpc('set_startup_ask', {
+      p_investment_case_id: ic.id,
+      p_valuation: v,
+      p_equity_pct: pct,
+    })
+    setSavingAsk(false)
+
+    if (error || !data?.success) {
+      toast.error('Failed to save ask', { description: error?.message ?? data?.error })
+      return
+    }
+
+    setIc(prev => (prev ? { ...prev, equity_offered_pct: pct, ask_amount: data.ask_amount } : prev))
+    toast.success('Ask updated!')
+  }
+
   const f = (key: keyof StartupProfile) => ({
     value: (form[key] as string) ?? '',
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -105,6 +137,60 @@ export default function StartupProfilePage({
             </p>
           )}
         </div>
+
+        {ic && (
+          <div className="space-y-4 rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
+            <div>
+              <h3 className="font-bold text-white">Your Ask</h3>
+              <p className="text-white/50 text-xs mt-0.5">
+                How much your company is worth, and how much of it you&apos;re offering to investors.
+              </p>
+            </div>
+
+            {ic.bidding_status !== 'pending' ? (
+              <p className="text-amber-400 text-sm font-semibold">
+                🔒 Bidding has started — your ask of {formatAmount(ic.ask_amount)} for {ic.equity_offered_pct}% is locked
+              </p>
+            ) : (
+              <>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-white/70">Company Valuation ($)</Label>
+                    <Input
+                      type="number"
+                      value={valuation}
+                      onChange={e => setValuation(e.target.value)}
+                      placeholder="1000000"
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-white/70">Equity Offered (%)</Label>
+                    <Input
+                      type="number"
+                      value={equityPct}
+                      onChange={e => setEquityPct(e.target.value)}
+                      min="1" max="100"
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                </div>
+                {parseFloat(valuation) > 0 && parseFloat(equityPct) > 0 && (
+                  <p className="text-white/60 text-sm">
+                    You&apos;re offering <span className="text-white font-semibold">{formatAmount(parseFloat(valuation) * parseFloat(equityPct) / 100)}</span> worth of equity ({equityPct}% of {formatAmount(parseFloat(valuation))}).
+                  </p>
+                )}
+                <Button
+                  onClick={saveAsk}
+                  disabled={savingAsk}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold"
+                >
+                  {savingAsk ? 'Saving…' : 'Save Ask'}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-5">
           <div className="grid sm:grid-cols-2 gap-4">

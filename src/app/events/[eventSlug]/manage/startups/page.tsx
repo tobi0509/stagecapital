@@ -6,10 +6,19 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
 import { formatAmount } from '@/lib/valuation/calculator'
 import type { InvestmentCase, StartupProfile, UserRole, Event } from '@/types/database'
+
+interface StartupCandidate {
+  userId: string
+  displayName: string
+  email: string
+}
+
+const UNIQUE_VIOLATION = '23505'
 
 export default function ManageStartupsPage({
   params,
@@ -21,14 +30,15 @@ export default function ManageStartupsPage({
 
   const [event, setEvent] = useState<Event | null>(null)
   const [cases, setCases] = useState<(InvestmentCase & { startup_profiles: StartupProfile | null })[]>([])
+  const [startupUsers, setStartupUsers] = useState<StartupCandidate[]>([])
   const [myRole, setMyRole] = useState<UserRole | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [reassigning, setReassigning] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     title: '',
-    equity_offered_pct: '20',
-    ask_amount: '500000',
+    startup_user_id: '',
   })
 
   useEffect(() => {
@@ -44,7 +54,7 @@ export default function ManageStartupsPage({
         .from('event_roles').select('role').eq('event_id', ev.id).eq('user_id', user.id).single()
       setMyRole(role?.role as UserRole)
 
-      await load(ev.id)
+      await Promise.all([load(ev.id), loadStartupUsers(ev.id)])
     }
 
     async function load(eventId: string) {
@@ -56,14 +66,37 @@ export default function ManageStartupsPage({
       setCases(data ?? [])
     }
 
+    async function loadStartupUsers(eventId: string) {
+      const { data } = await supabase
+        .from('event_roles')
+        .select('user_id, profiles(display_name, email)')
+        .eq('event_id', eventId)
+        .eq('role', 'startup')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const normalized = (data ?? []).map((r: any) => {
+        const profile = Array.isArray(r.profiles) ? r.profiles[0] ?? null : r.profiles
+        return { userId: r.user_id, displayName: profile?.display_name || 'Unknown', email: profile?.email || '' }
+      })
+      setStartupUsers(normalized)
+    }
+
     init()
   }, [eventSlug])
 
+  // Startup-role users who don't already own a case in this event (UNIQUE(event_id, startup_user_id))
+  const assignedIds = new Set(cases.map(c => c.startup_user_id))
+  const eligibleForNewCase = startupUsers.filter(u => !assignedIds.has(u.userId))
+
+  function eligibleForReassign(currentCaseId: string) {
+    return startupUsers.filter(u => {
+      const owningCase = cases.find(c => c.startup_user_id === u.userId)
+      return !owningCase || owningCase.id === currentCaseId
+    })
+  }
+
   async function createCase() {
-    if (!event) return
+    if (!event || !form.startup_user_id) return
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
     const nextOrder = cases.length
 
@@ -71,24 +104,48 @@ export default function ManageStartupsPage({
       .from('investment_cases')
       .insert({
         event_id: event.id,
-        startup_user_id: user.id, // placeholder — admin will assign startup user
+        startup_user_id: form.startup_user_id,
         title: form.title,
-        equity_offered_pct: parseFloat(form.equity_offered_pct),
-        ask_amount: parseFloat(form.ask_amount),
         pitch_order: nextOrder,
       })
       .select('*, startup_profiles(*)')
       .single()
 
     if (error) {
-      toast.error('Failed to create case', { description: error.message })
+      if (error.code === UNIQUE_VIOLATION) {
+        toast.error('This user already owns another case in this event')
+      } else {
+        toast.error('Failed to create case', { description: error.message })
+      }
     } else {
       setCases(prev => [...prev, data])
-      setForm({ title: '', equity_offered_pct: '20', ask_amount: '500000' })
+      setForm({ title: '', startup_user_id: '' })
       setShowForm(false)
       toast.success('Investment case created')
     }
     setLoading(false)
+  }
+
+  async function reassign(caseId: string, newStartupUserId: string) {
+    setReassigning(caseId)
+    const { data, error } = await supabase
+      .from('investment_cases')
+      .update({ startup_user_id: newStartupUserId })
+      .eq('id', caseId)
+      .select('*, startup_profiles(*)')
+      .single()
+
+    if (error) {
+      if (error.code === UNIQUE_VIOLATION) {
+        toast.error('This user already owns another case in this event')
+      } else {
+        toast.error('Failed to reassign', { description: error.message })
+      }
+    } else {
+      setCases(prev => prev.map(c => (c.id === caseId ? data : c)))
+      toast.success('Startup reassigned')
+    }
+    setReassigning(null)
   }
 
   return (
@@ -111,7 +168,10 @@ export default function ManageStartupsPage({
         {showForm && (
           <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5 space-y-4">
             <h3 className="font-bold text-white">New Investment Case</h3>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <p className="text-xs text-white/40">
+              The startup sets their own valuation and equity offered from their profile page — just create a slot and assign it to them here.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-white/70">Case Title</Label>
                 <Input
@@ -122,27 +182,24 @@ export default function ManageStartupsPage({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-white/70">Equity Offered (%)</Label>
-                <Input
-                  type="number"
-                  value={form.equity_offered_pct}
-                  onChange={e => setForm(p => ({ ...p, equity_offered_pct: e.target.value }))}
-                  min="1" max="100"
-                  className="bg-white/10 border-white/20 text-white"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-white/70">Ask Amount ($)</Label>
-                <Input
-                  type="number"
-                  value={form.ask_amount}
-                  onChange={e => setForm(p => ({ ...p, ask_amount: e.target.value }))}
-                  className="bg-white/10 border-white/20 text-white"
-                />
+                <Label className="text-white/70">Startup</Label>
+                <Select value={form.startup_user_id} onValueChange={v => { if (v) setForm(p => ({ ...p, startup_user_id: v })) }}>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                    <SelectValue placeholder={eligibleForNewCase.length ? 'Select a startup' : 'No eligible startups'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eligibleForNewCase.map(u => (
+                      <SelectItem key={u.userId} value={u.userId}>{u.displayName} ({u.email})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {startupUsers.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1">No one has the Startup role yet — assign it first in Participants.</p>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={createCase} disabled={loading || !form.title} className="bg-blue-500 hover:bg-blue-600 text-white">
+              <Button onClick={createCase} disabled={loading || !form.title || !form.startup_user_id} className="bg-blue-500 hover:bg-blue-600 text-white">
                 {loading ? 'Creating…' : 'Create Case'}
               </Button>
               <Button variant="outline" onClick={() => setShowForm(false)} className="border-white/20 text-white/70">
@@ -162,6 +219,22 @@ export default function ManageStartupsPage({
                   {ic.equity_offered_pct}% equity · Ask {formatAmount(ic.ask_amount)}
                 </p>
               </div>
+              {ic.bidding_status === 'pending' && (
+                <Select
+                  value={ic.startup_user_id}
+                  onValueChange={v => { if (v) reassign(ic.id, v) }}
+                  disabled={reassigning === ic.id}
+                >
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white text-xs w-44">
+                    <SelectValue placeholder="Assign startup" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eligibleForReassign(ic.id).map(u => (
+                      <SelectItem key={u.userId} value={u.userId}>{u.displayName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <PhaseIndicator status={ic.bidding_status} />
             </div>
           ))}

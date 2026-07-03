@@ -29,6 +29,8 @@ export default function InvestPage({
   const [myBudgetTotal, setMyBudgetTotal] = useState<number | null>(null)
   const [startup, setStartup] = useState<StartupProfile | null>(null)
   const [team, setTeam] = useState<TeamMember[]>([])
+  const [askAmount, setAskAmount] = useState<number | null>(null)
+  const [askEquityPct, setAskEquityPct] = useState<number | null>(null)
 
   const { bids, phase, countdownEndsAt, equityOffered, totalEquitySold, totalCapital, impliedValuation, loading } =
     useInvestmentCaseLive(caseId)
@@ -65,6 +67,16 @@ export default function InvestPage({
         .eq('investment_case_id', caseId)
         .single()
       setStartup(sp)
+
+      const { data: caseRow } = await supabase
+        .from('investment_cases')
+        .select('ask_amount, equity_offered_pct')
+        .eq('id', caseId)
+        .single()
+      if (caseRow) {
+        setAskAmount(caseRow.ask_amount)
+        setAskEquityPct(caseRow.equity_offered_pct)
+      }
 
       if (sp) {
         const { data: tm } = await supabase
@@ -135,6 +147,20 @@ export default function InvestPage({
         {/* Countdown */}
         {phase === 'countdown' && countdownEndsAt && (
           <CountdownTimer endsAt={countdownEndsAt} />
+        )}
+
+        {/* Startup's original ask, as a reference next to the live price */}
+        {askAmount !== null && askEquityPct !== null && askEquityPct > 0 && (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Asking Valuation</p>
+              <p className="text-lg font-bold text-white/80">{formatAmount(askAmount / (askEquityPct / 100))}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Offering</p>
+              <p className="text-lg font-bold text-white/80">{askEquityPct}% for {formatAmount(askAmount)}</p>
+            </div>
+          </div>
         )}
 
         {/* Live stats */}

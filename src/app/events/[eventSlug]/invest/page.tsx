@@ -7,8 +7,15 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { BudgetMeter } from '@/components/bidding/BudgetMeter'
 import { PhaseIndicator } from '@/components/bidding/PhaseIndicator'
 import { useBudget } from '@/hooks/useBudget'
-import { formatAmount } from '@/lib/valuation/calculator'
+import { formatAmount, formatValuation } from '@/lib/valuation/calculator'
 import type { Event, InvestmentCase, StartupProfile, UserRole, Bid } from '@/types/database'
+
+interface CaseStats {
+  total_equity_sold_pct: number
+  total_capital_raised: number
+  implied_valuation: number | null
+  investor_count: number
+}
 
 export default function PortfolioPage({
   params,
@@ -24,6 +31,7 @@ export default function PortfolioPage({
   const [myBudgetTotal, setMyBudgetTotal] = useState<number | null>(null)
   const [myBids, setMyBids] = useState<(Bid & { investment_cases: (InvestmentCase & { startup_profiles: StartupProfile | null }) | null })[]>([])
   const [allCases, setAllCases] = useState<(InvestmentCase & { startup_profiles: StartupProfile | null })[]>([])
+  const [statsMap, setStatsMap] = useState<Record<string, CaseStats>>({})
 
   const budget = useBudget(event?.id, userId, myBudgetTotal)
 
@@ -50,6 +58,13 @@ export default function PortfolioPage({
         .eq('event_id', ev.id)
         .order('pitch_order')
       setAllCases(cases ?? [])
+
+      // Case-level totals come from a SECURITY DEFINER RPC (bypasses per-row
+      // bid RLS) so investor and attendee see identical, correct numbers.
+      const { data: statsRows } = await supabase.rpc('event_valuation_stats', { p_event_id: ev.id })
+      const map: Record<string, CaseStats> = {}
+      for (const row of (statsRows ?? [])) map[row.investment_case_id] = row
+      setStatsMap(map)
 
       const { data: bids } = await supabase
         .from('bids')
@@ -112,20 +127,28 @@ export default function PortfolioPage({
 
         <div className="border-t border-white/10 pt-5 space-y-3">
           <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">All Investment Cases</h3>
-          {allCases.map(ic => (
-            <Link
-              key={ic.id}
-              href={`/events/${eventSlug}/invest/${ic.id}`}
-              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:border-white/20 p-3 transition-all"
-            >
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">
-                  {ic.startup_profiles?.company_name || ic.title}
-                </p>
-              </div>
-              <PhaseIndicator status={ic.bidding_status} />
-            </Link>
-          ))}
+          {allCases.map(ic => {
+            const stats = statsMap[ic.id]
+            const askValuation = ic.equity_offered_pct > 0 ? ic.ask_amount / (ic.equity_offered_pct / 100) : null
+            return (
+              <Link
+                key={ic.id}
+                href={`/events/${eventSlug}/invest/${ic.id}`}
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:border-white/20 p-3 transition-all"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">
+                    {ic.startup_profiles?.company_name || ic.title}
+                  </p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    {ic.equity_offered_pct}% offered · Asking {formatValuation(askValuation)}
+                    {stats?.implied_valuation ? ` · Now ${formatValuation(stats.implied_valuation)}` : ''}
+                  </p>
+                </div>
+                <PhaseIndicator status={ic.bidding_status} />
+              </Link>
+            )
+          })}
         </div>
       </main>
     </div>
