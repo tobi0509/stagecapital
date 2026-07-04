@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { BarChart3, Home, Settings, Users, Zap, Trophy, Mic, Building2 } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { BarChart3, Home, Settings, Users, Zap, Trophy, Mic, Building2, LogOut } from 'lucide-react'
 import type { UserRole } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
 
 interface SidebarProps {
   eventSlug?: string
@@ -12,8 +13,16 @@ interface SidebarProps {
 
 export function Sidebar({ eventSlug, role }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
 
   const links = getLinks(eventSlug, role)
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <aside className="w-56 shrink-0 border-r border-white/10 bg-black/40 hidden md:flex flex-col">
@@ -42,6 +51,16 @@ export function Sidebar({ eventSlug, role }: SidebarProps) {
           )
         })}
       </nav>
+
+      <div className="p-3 border-t border-white/10">
+        <button
+          onClick={handleSignOut}
+          className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:text-white hover:bg-white/5 transition-colors"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          Sign out
+        </button>
+      </div>
     </aside>
   )
 }
