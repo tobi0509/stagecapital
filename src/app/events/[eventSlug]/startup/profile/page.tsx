@@ -147,9 +147,9 @@ export default function StartupProfilePage({
               </p>
             </div>
 
-            {ic.bidding_status !== 'pending' ? (
+            {locked ? (
               <p className="text-amber-400 text-sm font-semibold">
-                🔒 Bidding has started — your ask of {formatAmount(ic.ask_amount)} for {ic.equity_offered_pct}% is locked
+                🔒 The event has started — your ask of {formatAmount(ic.ask_amount)} for {ic.equity_offered_pct}% is locked. Contact an event admin if it needs to change.
               </p>
             ) : (
               <>
